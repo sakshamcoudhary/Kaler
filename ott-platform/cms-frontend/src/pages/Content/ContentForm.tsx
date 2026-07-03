@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver }          from '@hookform/resolvers/zod';
 import { z }                    from 'zod';
@@ -152,11 +152,14 @@ export default function ContentForm({ type }: ContentFormProps) {
     enabled:  isEdit,
   });
 
+  const [searchParams] = useSearchParams();
+  const isTrendingQuery = searchParams.get('trending') === 'true' || searchParams.get('isTrending') === 'true';
+
   const { register, handleSubmit, reset, watch, setValue, control,
     formState: { errors, isDirty },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { status: 'draft', isPremium: false, isFeatured: false, isTrending: false, language: ['en'], genreIds: [] },
+    defaultValues: { status: 'draft', isPremium: false, isFeatured: false, isTrending: isTrendingQuery, language: ['en'], genreIds: [] },
   });
 
   useEffect(() => {
@@ -241,7 +244,7 @@ export default function ContentForm({ type }: ContentFormProps) {
             <div className="flex items-center gap-2">
               {isMovie ? <Film size={20} className="text-brand-400" /> : <Tv size={20} className="text-brand-400" />}
               <h2 className="text-xl font-semibold text-white">
-                {isEdit ? 'Edit' : 'New'} {isMovie ? 'Movie' : 'Series'}
+                {isEdit ? 'Edit' : (isMovie && isTrendingQuery ? 'New Top 10 Movie' : `New ${isMovie ? 'Movie' : 'Series'}`)}
               </h2>
             </div>
             <div className="ml-auto flex gap-3">
