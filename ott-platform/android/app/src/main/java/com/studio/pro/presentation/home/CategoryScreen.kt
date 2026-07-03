@@ -30,6 +30,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.studio.pro.domain.model.*
 import com.studio.pro.presentation.common.OttColors
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.studio.pro.R
 
 @Composable
 fun CategoryScreen(
@@ -187,7 +190,12 @@ fun CategoryScreen(
                                 else -> true
                             }
                             val matchesGenre = selectedGenre == null || item.genres.any { it.id == selectedGenre!!.id }
-                            matchesType && matchesGenre
+                            val isDuplicateFeatured = section.sectionType != "featured" && (
+                                item.id == selectedSeriesBannerId ||
+                                item.id == selectedMovieBannerId ||
+                                item.id == selectedGenericBannerId
+                            )
+                            matchesType && matchesGenre && !isDuplicateFeatured
                         }
 
                         if (filteredItems.isNotEmpty()) {
@@ -318,7 +326,7 @@ private fun CategoryHeroBanner(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp),
+            .padding(vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         // Ambient Halo Glow
@@ -352,7 +360,7 @@ private fun CategoryHeroBanner(
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(featuredItem.posterUrl ?: featuredItem.thumbnailUrl ?: featuredItem.bannerUrl)
+                    .data(featuredItem.featurePosterUrl ?: featuredItem.posterUrl ?: featuredItem.thumbnailUrl ?: featuredItem.bannerUrl)
                     .allowHardware(false)
                     .build(),
                 contentDescription = featuredItem.title,
@@ -524,7 +532,7 @@ private fun ContentRow(
     showProgress:  Boolean = false,
     progressItems: List<WatchProgress> = emptyList(),
 ) {
-    Column(modifier = Modifier.padding(vertical = 12.dp)) {
+    Column(modifier = Modifier.padding(vertical = 6.dp)) {
         Text(
             text       = title,
             color      = Color.White,
@@ -588,23 +596,16 @@ private fun ContentCard(
             modifier           = Modifier.fillMaxSize(),
         )
         
-        // Red "K" logo in top-left
+        // App logo in top-left
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(6.dp)
         ) {
-            Text(
-                text = "K",
-                color = OttColors.Brand,
-                fontWeight = FontWeight.Black,
-                fontSize = 14.sp,
-                style = LocalTextStyle.current.copy(
-                    shadow = Shadow(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        blurRadius = 4f
-                    )
-                )
+            Image(
+                painter = painterResource(id = R.drawable.ic_app_logo),
+                contentDescription = "App Logo",
+                modifier = Modifier.size(16.dp)
             )
         }
 
@@ -679,17 +680,10 @@ private fun RankedContentCard(
                     .align(Alignment.TopStart)
                     .padding(6.dp)
             ) {
-                Text(
-                    text = "K",
-                    color = OttColors.Brand,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 14.sp,
-                    style = LocalTextStyle.current.copy(
-                        shadow = Shadow(
-                            color = Color.Black.copy(alpha = 0.5f),
-                            blurRadius = 4f
-                        )
-                    )
+                Image(
+                    painter = painterResource(id = R.drawable.ic_app_logo),
+                    contentDescription = "App Logo",
+                    modifier = Modifier.size(16.dp)
                 )
             }
 

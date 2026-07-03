@@ -28,7 +28,22 @@ class MainActivity : ComponentActivity(), PaymentResultListener {
     @Inject
     lateinit var tokenStorage: TokenStorage
 
+    @Inject
+    lateinit var exoPlayerManager: com.studio.pro.player.ExoPlayerManager
+
     var razorpayCallback: ((success: Boolean, paymentId: String?, error: String?) -> Unit)? = null
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            if (exoPlayerManager.isPlaying()) {
+                val params = android.app.PictureInPictureParams.Builder()
+                    .setAspectRatio(android.util.Rational(16, 9))
+                    .build()
+                enterPictureInPictureMode(params)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
@@ -46,7 +61,7 @@ class MainActivity : ComponentActivity(), PaymentResultListener {
                 tokenStorage.saveDeviceId(java.util.UUID.randomUUID().toString())
             }
             startDest = if (tokenStorage.getAccessToken() != null) {
-                com.studio.pro.presentation.navigation.Routes.HOME
+                com.studio.pro.presentation.navigation.Routes.CHOOSE_PROFILE
             } else {
                 com.studio.pro.presentation.navigation.Routes.LOGIN
             }

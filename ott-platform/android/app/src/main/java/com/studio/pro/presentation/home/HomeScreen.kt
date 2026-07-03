@@ -2,6 +2,7 @@ package com.studio.pro.presentation.home
 
 import androidx.compose.animation.*
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -28,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.studio.pro.domain.model.*
 import com.studio.pro.presentation.common.OttColors
+import com.studio.pro.presentation.common.HomeBottomNavigationBar
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
@@ -36,6 +38,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.drawable.toBitmap
 import coil.request.ImageRequest
+import androidx.compose.ui.res.painterResource
+import com.studio.pro.R
 
 @Composable
 fun HomeScreen(
@@ -44,6 +48,7 @@ fun HomeScreen(
     onProfileClick:      () -> Unit,
     onNavigateToSeries:  () -> Unit,
     onNavigateToMovies:  () -> Unit,
+    onDownloadsClick:    () -> Unit,
     viewModel:           HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -57,7 +62,7 @@ fun HomeScreen(
     var selectedMovieBannerId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedGenericBannerId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    var dominantColor by remember { mutableStateOf(Color(0xFF1A0808)) }
+    var dominantColor by remember { mutableStateOf(Color(0xFF121212)) }
 
     val darkDominantColor = remember(dominantColor) {
         val hsl = FloatArray(3)
@@ -105,12 +110,11 @@ fun HomeScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = paddingValues.calculateBottomPadding())
                 .background(horizontalBackgroundGradient)
                 .background(verticalBlackScrim)
         ) {
             if (uiState.isLoading && uiState.featured.isEmpty()) {
-                HomeSkeletonLoader()
+                HomeSkeletonLoader(bottomPadding = paddingValues.calculateBottomPadding())
             } else {
                 val listState = rememberLazyListState()
                 val isScrolled by remember {
@@ -126,7 +130,7 @@ fun HomeScreen(
                 LazyColumn(
                     state               = listState,
                     modifier            = Modifier.fillMaxSize(),
-                    contentPadding      = PaddingValues(bottom = 16.dp),
+                    contentPadding      = PaddingValues(bottom = paddingValues.calculateBottomPadding() + 16.dp),
                     verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
                     // ── Sticky Top Navigation Header ──────────────
@@ -142,6 +146,7 @@ fun HomeScreen(
                                 avatarUrl      = uiState.currentUser?.avatarUrl,
                                 onSearchClick  = onSearchClick,
                                 onProfileClick = onProfileClick,
+                                onDownloadsClick = onDownloadsClick,
                             )
                         }
                     }
@@ -219,13 +224,22 @@ fun HomeScreen(
                     // ── Dynamic Sections ───────────────────────────
                     items(uiState.homeSections) { section ->
                         val filteredItems = section.items.filter { item ->
-                            val matchesType = when (selectedFilter) {
-                                "Series" -> item.type == ContentType.SERIES
-                                "Films" -> item.type == ContentType.MOVIE
-                                else -> true
+                            val matchesType = if (section.title.equals("Action Movies", ignoreCase = true)) {
+                                true
+                            } else {
+                                when (selectedFilter) {
+                                    "Series" -> item.type == ContentType.SERIES
+                                    "Films" -> item.type == ContentType.MOVIE
+                                    else -> true
+                                }
                             }
                             val matchesGenre = selectedGenre == null || item.genres.any { it.id == selectedGenre!!.id }
-                            matchesType && matchesGenre
+                            val isDuplicateFeatured = section.sectionType != "featured" && (
+                                item.id == selectedSeriesBannerId ||
+                                item.id == selectedMovieBannerId ||
+                                item.id == selectedGenericBannerId
+                            )
+                            matchesType && matchesGenre && !isDuplicateFeatured
                         }
 
                         if (filteredItems.isNotEmpty()) {
@@ -316,6 +330,7 @@ private fun HomeTopBar(
     avatarUrl:      String?,
     onSearchClick:  () -> Unit,
     onProfileClick: () -> Unit,
+    onDownloadsClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -324,32 +339,20 @@ private fun HomeTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment     = Alignment.CenterVertically,
     ) {
-        // Left side: Vertical red brand logo icon + bold white title "Home"
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(8.dp)
-                    .height(26.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(OttColors.Brand)
-            )
-            Text(
-                text = "Home",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 22.sp
-            )
-        }
+        // Left side: Wide splash logo
+        Image(
+            painter = painterResource(id = R.drawable.homelogo),
+            contentDescription = "App Logo",
+            modifier = Modifier.height(48.dp),
+            contentScale = ContentScale.Fit
+        )
 
         // Right side: white Download tray icon + white Notification Bell with red badge '5'
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { /* Handle downloads click */ }) {
+            IconButton(onClick = onDownloadsClick) {
                 Icon(
                     imageVector = Icons.Default.Download,
                     contentDescription = "Downloads",
@@ -427,132 +430,6 @@ private fun FilterChipItem(
     }
 }
 
-// ─── Bottom Navigation Bar ────────────────────────────────────
-
-@Composable
-private fun HomeBottomNavigationBar(
-    selectedItem:  Int,
-    avatarUrl:     String?,
-    onTabSelected: (Int) -> Unit
-) {
-    NavigationBar(
-        containerColor = Color(0xFF0F0F0F),
-        tonalElevation = 0.dp,
-        modifier = Modifier.height(64.dp)
-    ) {
-        val colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = Color.White,
-            selectedTextColor = Color.White,
-            unselectedIconColor = Color(0xFF8E8E93),
-            unselectedTextColor = Color(0xFF8E8E93),
-            indicatorColor = Color.Transparent
-        )
-
-        // Tab 0: Home
-        val homeSelected = selectedItem == 0
-        NavigationBarItem(
-            selected = homeSelected,
-            onClick = { onTabSelected(0) },
-            icon = {
-                Icon(
-                    imageVector = if (homeSelected) Icons.Default.Home else Icons.Outlined.Home,
-                    contentDescription = "Home"
-                )
-            },
-            label = {
-                Text(
-                    text = "Home",
-                    fontSize = 10.sp,
-                    fontWeight = if (homeSelected) FontWeight.Bold else FontWeight.Normal
-                )
-            },
-            colors = colors
-        )
-
-        // Tab 1: Upcoming
-        val upcomingSelected = selectedItem == 1
-        NavigationBarItem(
-            selected = upcomingSelected,
-            onClick = { onTabSelected(1) },
-            icon = {
-                Icon(
-                    imageVector = if (upcomingSelected) Icons.Default.Notifications else Icons.Outlined.Notifications,
-                    contentDescription = "Upcoming"
-                )
-            },
-            label = {
-                Text(
-                    text = "Upcoming",
-                    fontSize = 10.sp,
-                    fontWeight = if (upcomingSelected) FontWeight.Bold else FontWeight.Normal
-                )
-            },
-            colors = colors
-        )
-
-        // Tab 2: Search
-        val searchSelected = selectedItem == 2
-        NavigationBarItem(
-            selected = searchSelected,
-            onClick = { onTabSelected(2) },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search"
-                )
-            },
-            label = {
-                Text(
-                    text = "Search",
-                    fontSize = 10.sp,
-                    fontWeight = if (searchSelected) FontWeight.Bold else FontWeight.Normal
-                )
-            },
-            colors = colors
-        )
-
-        // Tab 3: My Studio (My Netflix)
-        val studioSelected = selectedItem == 3
-        NavigationBarItem(
-            selected = studioSelected,
-            onClick = { onTabSelected(3) },
-            icon = {
-                if (!avatarUrl.isNullOrEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .border(
-                                width = 1.dp,
-                                color = if (studioSelected) Color.White else Color.Transparent,
-                                shape = RoundedCornerShape(4.dp)
-                            )
-                    ) {
-                        AsyncImage(
-                            model = avatarUrl,
-                            contentDescription = "My Studio",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "My Studio"
-                    )
-                }
-            },
-            label = {
-                Text(
-                    text = "My Studio",
-                    fontSize = 10.sp,
-                    fontWeight = if (studioSelected) FontWeight.Bold else FontWeight.Normal
-                )
-            },
-            colors = colors
-        )
-    }
-}
 
 // ─── Hero Banner Pager ────────────────────────────────────────
 
@@ -578,7 +455,7 @@ private fun HeroBanner(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp),
+            .padding(vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         // Ambient Halo Glow
@@ -795,7 +672,7 @@ private fun ContentRow(
     showProgress:  Boolean = false,
     progressItems: List<WatchProgress> = emptyList(),
 ) {
-    Column(modifier = Modifier.padding(vertical = 12.dp)) {
+    Column(modifier = Modifier.padding(vertical = 6.dp)) {
         Text(
             text       = title,
             color      = Color.White,
@@ -861,23 +738,16 @@ private fun ContentCard(
             modifier           = Modifier.fillMaxSize(),
         )
         
-        // Red "K" logo in top-left
+        // App logo in top-left
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(6.dp)
         ) {
-            Text(
-                text = "K",
-                color = OttColors.Brand,
-                fontWeight = FontWeight.Black,
-                fontSize = 14.sp,
-                style = LocalTextStyle.current.copy(
-                    shadow = Shadow(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        blurRadius = 4f
-                    )
-                )
+            Image(
+                painter = painterResource(id = R.drawable.ic_app_logo),
+                contentDescription = "App Logo",
+                modifier = Modifier.size(16.dp)
             )
         }
 
@@ -952,23 +822,16 @@ private fun RankedContentCard(
                 modifier           = Modifier.fillMaxSize(),
             )
             
-            // Red "K" logo in top-left
+            // App logo in top-left
             Box(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(6.dp)
             ) {
-                Text(
-                    text = "K",
-                    color = OttColors.Brand,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 14.sp,
-                    style = LocalTextStyle.current.copy(
-                        shadow = Shadow(
-                            color = Color.Black.copy(alpha = 0.5f),
-                            blurRadius = 4f
-                        )
-                    )
+                Image(
+                    painter = painterResource(id = R.drawable.ic_app_logo),
+                    contentDescription = "App Logo",
+                    modifier = Modifier.size(16.dp)
                 )
             }
 
@@ -1036,27 +899,156 @@ private fun WideContentCard(
 // ─── Skeleton Loader ──────────────────────────────────────────
 
 @Composable
-private fun HomeSkeletonLoader() {
-    val shimmerBrush = Brush.horizontalGradient(
-        colors = listOf(OttColors.Surface, OttColors.SurfaceVariant, OttColors.Surface),
+private fun HomeSkeletonLoader(bottomPadding: Dp = 0.dp) {
+    val transition = rememberInfiniteTransition(label = "homeShimmer")
+    val translateAnim by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1200f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1200,
+                easing = FastOutSlowInEasing
+            ),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "homeShimmerTranslate"
     )
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+
+    val shimmerBrush = Brush.linearGradient(
+        colors = listOf(
+            OttColors.Surface,
+            Color(0xFF282828), // Sleek highlight in the middle
+            OttColors.Surface
+        ),
+        start = Offset(0f, 0f),
+        end = Offset(translateAnim, translateAnim)
+    )
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = bottomPadding + 16.dp)
+    ) {
+        // 1. App Header/Logo Area placeholder
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Logo placeholder
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(shimmerBrush)
+                )
+                // Search & Profile icons placeholder
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(shimmerBrush)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(shimmerBrush)
+                    )
+                }
+            }
+        }
+
+        // 2. Filter chips row placeholder
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val chipWidths = listOf(75.dp, 85.dp, 70.dp, 95.dp)
+                chipWidths.forEach { width ->
+                    Box(
+                        modifier = Modifier
+                            .width(width)
+                            .height(36.dp)
+                            .clip(RoundedCornerShape(50.dp))
+                            .background(shimmerBrush)
+                    )
+                }
+            }
+        }
+
+        // 3. Featured HeroBanner placeholder (aspectRatio 2f/3f, padded horizontal 24.dp)
         item {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(0.76f)
                     .padding(horizontal = 24.dp, vertical = 12.dp)
+                    .aspectRatio(2f / 3f)
                     .clip(RoundedCornerShape(12.dp))
                     .background(shimmerBrush)
             )
         }
-        items(3) {
+
+        // 4. Continue Watching row placeholder (WIDE card style: width 160.dp, height 90.dp)
+        item {
             Column(modifier = Modifier.padding(vertical = 12.dp)) {
-                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).width(140.dp).height(18.dp).clip(RoundedCornerShape(4.dp)).background(shimmerBrush))
-                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(5) {
-                        Box(modifier = Modifier.width(100.dp).height(145.dp).clip(RoundedCornerShape(8.dp)).background(shimmerBrush))
+                // Section Title placeholder
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .width(160.dp)
+                        .height(18.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(shimmerBrush)
+                )
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(3) {
+                        Box(
+                            modifier = Modifier
+                                .width(160.dp)
+                                .height(90.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(shimmerBrush)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 5. Standard category rows placeholder (STANDARD card style: width 100.dp, height 145.dp)
+        items(2) {
+            Column(modifier = Modifier.padding(vertical = 12.dp)) {
+                // Section Title placeholder
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .width(140.dp)
+                        .height(18.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(shimmerBrush)
+                )
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(4) {
+                        Box(
+                            modifier = Modifier
+                                .width(100.dp)
+                                .height(145.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(shimmerBrush)
+                        )
                     }
                 }
             }

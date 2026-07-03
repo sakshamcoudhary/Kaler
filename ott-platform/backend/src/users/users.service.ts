@@ -6,13 +6,14 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, MoreThan } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { UserEntity, UserRole } from './entities/user.entity';
 import { DeviceEntity, DeviceType } from './entities/device.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, AdminCreateUserDto, AdminUpdateUserDto } from './dto/update-user.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { BannerEntity } from '../banners/entities/banner.entity';
 
 @Injectable()
 export class UsersService {
@@ -39,12 +40,25 @@ export class UsersService {
 
     const passwordHash = await bcrypt.hash(dto.password, this.SALT_ROUNDS);
 
+    let defaultAvatarUrl: string | undefined;
+    try {
+      const banner = await this.userRepo.manager.getRepository(BannerEntity).findOne({
+        where: { sortOrder: 0, isActive: true },
+      });
+      if (banner) {
+        defaultAvatarUrl = banner.imageUrl;
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to find default avatar with sortOrder = 0: ${err.message}`);
+    }
+
     const user = this.userRepo.create({
       email:       dto.email.toLowerCase().trim(),
       phone:       dto.phone,
       displayName: dto.displayName || dto.email.split('@')[0],
       passwordHash,
       role:        UserRole.USER,
+      avatarUrl:   defaultAvatarUrl,
     });
 
     return this.userRepo.save(user);
@@ -82,6 +96,28 @@ export class UsersService {
     }
 
     const [users, total] = await qb.getManyAndCount();
+
+    const userIds = users.map(u => u.id);
+    if (userIds.length > 0) {
+      const activeSubs = await this.userRepo.manager.getRepository('SubscriptionEntity').find({
+        where: {
+          userId: In(userIds),
+          status: 'active' as any,
+          expiresAt: MoreThan(new Date()),
+        },
+        relations: ['plan'],
+      }) as any[];
+      
+      const activeSubsMap = new Map(activeSubs.map(s => [s.userId, s]));
+      users.forEach(u => {
+        const sub = activeSubsMap.get(u.id);
+        u.hasActiveSubscription = !!sub;
+        if (sub) {
+          u.subscriptionExpiry = sub.expiresAt;
+          u.subscriptionPlanName = sub.plan?.name;
+        }
+      });
+    }
 
     const totalActive = await this.userRepo.count({ where: { isActive: true } });
     const totalAdmins = await this.userRepo.count({
@@ -257,6 +293,7 @@ export class UsersService {
       email:       dto.email.toLowerCase().trim(),
       phone:       dto.phone,
       displayName: dto.displayName || dto.email.split('@')[0],
+      avatarUrl:   dto.avatarUrl,
       passwordHash,
       role:        dto.role,
       isActive:    true,
@@ -272,6 +309,7 @@ export class UsersService {
 
     if (dto.displayName !== undefined) user.displayName = dto.displayName;
     if (dto.phone !== undefined)       user.phone       = dto.phone;
+    if (dto.avatarUrl !== undefined)   user.avatarUrl   = dto.avatarUrl;
     if (dto.role !== undefined)        user.role        = dto.role;
     if (dto.isActive !== undefined)    user.isActive    = dto.isActive;
 
